@@ -47,23 +47,28 @@ def get_db_connection():
     
     return conn
 
-def fetch_all_business_ids():
-    """Fetch all place_ids from the businesses table."""
+def fetch_active_subscription_business_ids():
+    """Fetch all business_place_ids from the user_business table that have active subscriptions."""
     place_ids = []
     conn = None
     
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            cursor.execute("SELECT place_id FROM businesses")
+            cursor.execute("""
+                SELECT DISTINCT business_place_id 
+                FROM user_business 
+                WHERE subscription_status = 'active' 
+                AND (expires_at IS NULL OR expires_at > NOW())
+            """)
             for row in cursor:
-                place_ids.append(row['place_id'])
+                place_ids.append(row['business_place_id'])
         
-        logger.info(f"Found {len(place_ids)} businesses in the database")
+        logger.info(f"Found {len(place_ids)} businesses with active subscriptions")
         return place_ids
     
     except Exception as e:
-        logger.error(f"Error fetching businesses: {str(e)}")
+        logger.error(f"Error fetching businesses with active subscriptions: {str(e)}")
         raise
     
     finally:
@@ -75,11 +80,11 @@ def main():
         # Initialize Outscraper
         scraper = Outscraper()
         
-        # Get all business place_ids from the database
-        place_ids = fetch_all_business_ids()
+        # Get all business place_ids with active subscriptions
+        place_ids = fetch_active_subscription_business_ids()
         
         if not place_ids:
-            logger.warning("No businesses found in the database")
+            logger.warning("No businesses with active subscriptions found in the database")
             return
         
         # Process each business
@@ -97,7 +102,7 @@ def main():
                 # Continue with the next business
                 continue
         
-        logger.info(f"Completed processing all {total} businesses")
+        logger.info(f"Completed processing all {total} businesses with active subscriptions")
     
     except Exception as e:
         logger.error(f"Fatal error in main process: {str(e)}")

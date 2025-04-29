@@ -21,6 +21,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("outscraper")
 
+WAIT_TIME = os.getenv('WAIT_TIME', 30)
+
 class Outscraper:
     """
     A class to handle Google Maps business and review data storage.
@@ -196,6 +198,9 @@ class Outscraper:
                 self.results['businesses_inserted'] += 1
                 logger.info(f"Inserted new business: {business['name']} ({business['place_id']})")
             
+            # Commit the transaction
+            self.conn.commit()
+            
             return True, business['place_id']
             
         except Exception as e:
@@ -282,6 +287,9 @@ class Outscraper:
                 self.cursor.execute(rev_insert_query, review_values)
                 self.results['reviews_inserted'] += 1
                 logger.debug(f"Inserted new review: {review_record['review_id']}")
+            
+            # Commit the transaction
+            self.conn.commit()
             
             return True, review_record['review_id']
             
@@ -409,7 +417,7 @@ class Outscraper:
         attempts = 10 # retry 5 times
         while attempts and running_request_ids: # stop when no more attempts are left or when no more running request ids
             attempts -= 1
-            time.sleep(30)
+            time.sleep(WAIT_TIME)
 
             for request_id in list(running_request_ids): # we don't want to change the set while iterating, so cloning it to list
                 result = self.client.get_request_archive(request_id)
@@ -422,14 +430,26 @@ class Outscraper:
             self.save_data(result)
     
     def get_all_reviews_last_24(self, place_id: str):
+        """Fetch reviews from the last 24 hours for a given place ID."""
         yesterday_timestamp = int((datetime.now() - timedelta(1)).timestamp())
+        max_attempts = 20  # Maximum number of attempts to get results
+        max_wait_time = 600  # Maximum wait time in seconds (10 minutes)
+        start_time = time.time()
 
         running_request_ids = set()
         results = []
         try:
+            # Make the initial request
             for attempt in range(3):
                 try:
-                    response = self.client.google_maps_reviews(place_id, sort='newest', reviews_limit=50, async_request=True, cutoff=yesterday_timestamp, language='en')
+                    response = self.client.google_maps_reviews(
+                        place_id, 
+                        sort='newest', 
+                        reviews_limit=50, 
+                        async_request=True, 
+                        cutoff=yesterday_timestamp, 
+                        language='en'
+                    )
                     running_request_ids.add(response['id'])
                     break
                 except Exception as e:
@@ -438,22 +458,32 @@ class Outscraper:
                         raise
             else:
                 logger.error(f"Failed to get reviews for {place_id} after 3 attempts")
+                return
 
-            # Grab the results
-            attempts = 20  # retry up to 20 times
-            while attempts and running_request_ids:  # stop when no more attempts are left or when no more running request ids
-                attempts -= 1
-                time.sleep(30)
+            # Poll for results with timeout
+            while running_request_ids and (time.time() - start_time) < max_wait_time:
+                time.sleep(30)  # Wait 30 seconds between checks
 
-                for request_id in list(running_request_ids):  # we don't want to change the set while iterating, so cloning it to list
-                    result = self.client.get_request_archive(request_id)
-
-                    if result['status'] == 'Success':
-                        results.append(result['data'])
+                for request_id in list(running_request_ids):
+                    try:
+                        result = self.client.get_request_archive(request_id)
+                        
+                        if result['status'] == 'Success':
+                            results.append(result['data'])
+                            running_request_ids.remove(request_id)
+                        elif result['status'] == 'Error':
+                            logger.error(f"Request {request_id} failed: {result.get('message', 'Unknown error')}")
+                            running_request_ids.remove(request_id)
+                    except Exception as e:
+                        logger.error(f"Error checking request {request_id}: {str(e)}")
                         running_request_ids.remove(request_id)
-            
-            for result in results:
-                self.save_data(result)
+
+            # Save results if we have any
+            if results:
+                for result in results:
+                    self.save_data(result)
+            else:
+                logger.warning(f"No results obtained for place_id {place_id} within the timeout period")
                 
         except Exception as e:
             logger.error(f"Error in get_all_reviews_last_24 for {place_id}: {str(e)}")

@@ -2,7 +2,12 @@
 import sys
 import logging
 from scraper import Outscraper
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
+
+REVIEW_LIMIT = os.getenv('REVIEW_LIMIT'), #0 means all reviews
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -13,8 +18,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("fetch_reviews")
-
-REVIEW_LIMIT = 20 #0 means all reviews
 
 def main():
     if len(sys.argv) != 2:
