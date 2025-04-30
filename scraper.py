@@ -403,6 +403,8 @@ class Outscraper:
                 try:
                     #print(f"Fetching reviews for {place_id} with limit {reviews_limit}")
                     response  = self.client.google_maps_reviews(place_id, sort='newest', reviews_limit=reviews_limit, language='en', async_request=True)
+                    #response  = self.client.google_maps_reviews(place_id, sort='lowest_rating', reviews_limit=reviews_limit, language='en', async_request=True)
+
                     running_request_ids.add(response['id'])
                 except Exception as e:
                     logger.error(f"Error in get_all_reviews for {place_id}: {str(e)}")

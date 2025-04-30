@@ -25,7 +25,7 @@ def main():
         sys.exit(1)
     
     place_id = sys.argv[1]
-    logger.info(f"Fetching reviews for place_id: {place_id}")
+    logger.info(f"Scraping reviews for place_id: {place_id}")
     
     try:
         # Initialize Outscraper
@@ -34,9 +34,9 @@ def main():
         # Fetch and save reviews from the last 24 hours
         scraper.get_all_reviews([place_id], REVIEW_LIMIT)
         
-        logger.info(f"Successfully fetched reviews for place_id: {place_id}")
+        logger.info(f"Successfully Scraped reviews for place_id: {place_id}")
     except Exception as e:
-        logger.error(f"Error fetching reviews: {str(e)}")
+        logger.error(f"Error scraping reviews: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":
